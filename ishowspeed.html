@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>喵</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body class="light">
+    <!-- 页头 -->
+    <header class="header">
+      <h1 class="title"><a href="/" class="cursor-pointer">喵</a></h1>
+    </header>
+    <!-- 侧边栏按钮和侧边栏 -->
+    <nav class="toolbar">
+      <button class="cursor-pointer sidebar-btn" id="sidebarToggle">☰ 侧边栏</button>
+    </nav>
+    <div
+      id="sidebarMask"
+      style="
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 99;
+        background: rgba(0, 0, 0, 0.2);
+      "
+    ></div>
+    <aside class="sidebar"id="sidebar">
+      <ul>
+        <li class="sidebar-word"><a href="/" class="cursor-pointer">主页</a></li>
+
+        <li class="sidebar-word"><a href="/from-sidebar/about.html" class="cursor-pointer">关于我</a></li>
+
+        <li class="sidebar-word"><a href="/from-sidebar/contact.html" class="cursor-pointer">联系</a></li>
+
+        <li class="sidebar-word"><a href="/ishowspeed.html" class="cursor-pointer">测速</a></li>
+
+        <li class="sidebar-word"><a href="https://status.zccu.qzz.io" class="cursor-pointer">状态</a></li>
+      </ul>
+    </aside>
+    <!-- 主内容 -->
+    <main class="content">
+      <article class="post">
+        <h2 class="post-title">开始测试</h2>
+        <div class="post-content">
+          <h4>测速说明：</h4>
+        <ul>
+          <li>延迟测试：通过多次请求计算平均响应时间</li>
+          <li>下载速度：测试从服务器下载数据的速度</li>
+          <li>结果仅供参考，实际速度受多种因素影响</li>
+          <li>建议在网络稳定时进行测试以获得准确结果</li>
+          <li>不是很准</li>
+        </ul>
+        <button class="read-more-btn cursor-pointer" id="startBtn" onclick="startTest()">
+        开始测速
+      </button>
+
+      <div class="status-text" id="statusText"></div>
+
+      <div class="progress-container" id="progressContainer">
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <div class="progress-text" id="progressText">准备测试...</div>
+      </div>
+
+      <div class="results" id="results">
+        <div class="result-card">
+          <h3>延迟 (Ping)</h3>
+          <div>
+            <span class="result-value" id="latencyValue">0</span>
+            <span class="result-unit">ms</span>
+          </div>
+        </div>
+
+        <div class="result-card">
+          <h3>下载速度</h3>
+          <div>
+            <span class="result-value" id="downloadValue">0</span>
+            <span class="result-unit">Mbps</span>
+          </div>
+        </div>
+        <br />
+        <div class="timestamp" id="timestamp"></div>
+      </div>
+      </article>
+    </main>
+    <script src="/sidebar.js"></script>
+    <script>
+        let testing = false;
+        
+        async function testLatency() {
+            const pings = [];
+            const testCount = 5;
+        
+            for (let i = 0; i < testCount; i++) {
+                updateStatus(`正在测试延迟... (${i + 1}/${testCount})`);
+                const startTime = performance.now();
+                
+                try {
+                    const cacheBuster = `?ping=${Date.now()}_${Math.random()}`;
+                    await fetch(`${window.location.origin}/${cacheBuster}`, {
+                        method: 'HEAD',
+                        cache: 'no-store',
+                        headers: {
+                            'Cache-Control': 'no-cache',
+                            'Pragma': 'no-cache'
+                        }
+                    });
+                    
+                    const endTime = performance.now();
+                    pings.push(endTime - startTime);
+                } catch (error) {
+                    console.error('延迟测试错误:', error);
+                }
+        
+                await sleep(200);
+            }
+        
+            return pings.length > 0 
+                ? pings.reduce((a, b) => a + b) / pings.length 
+                : 0;
+        }
+        
+        async function testDownloadSpeed() {
+            const testSizes = [10000000, 20000000, 50000000]; // 10MB, 20MB, 50MB
+            const speeds = [];
+        
+            for (let i = 0; i < testSizes.length; i++) {
+                updateStatus(`正在测试下载速度... (${i + 1}/${testSizes.length})`);
+                const size = testSizes[i];
+                const startTime = performance.now();
+                
+                try {
+                    const cacheBuster = `?download=${Date.now()}_${Math.random()}_${size}`;
+                    const url = `${window.location.origin}/${cacheBuster}`;
+                    
+                    const response = await fetch(url, {
+                        method: 'GET',
+                        cache: 'no-store',
+                        headers: {
+                            'Cache-Control': 'no-cache',
+                            'Pragma': 'no-cache'
+                        }
+                    });
+                    
+                    await response.blob();
+                    const endTime = performance.now();
+                    const duration = (endTime - startTime) / 1000;
+                    const speed = (size * 8) / duration / 1000000;
+                    
+                    speeds.push(speed);
+                } catch (error) {
+                    console.error('下载测试错误:', error);
+                }
+        
+                await sleep(300);
+            }
+        
+            return speeds.length > 0 
+                ? speeds.reduce((a, b) => a + b) / speeds.length 
+                : 0;
+        }
+        
+        function updateProgress(percent) {
+            const progressFill = document.getElementById('progressFill');
+            const progressText = document.getElementById('progressText');
+            progressFill.style.width = percent + '%';
+            progressText.textContent = `测试进度: ${Math.round(percent)}%`;
+        }
+        
+        function updateStatus(text) {
+            const statusText = document.getElementById('statusText');
+            statusText.textContent = text;
+            statusText.style.display = 'block';
+        }
+        
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+        
+        async function startTest() {
+            if (testing) return;
+            
+            testing = true;
+            const startBtn = document.getElementById('startBtn');
+            const progressContainer = document.getElementById('progressContainer');
+            const results = document.getElementById('results');
+            const statusText = document.getElementById('statusText');
+            
+            startBtn.disabled = true;
+            startBtn.textContent = '测试中...';
+            progressContainer.style.display = 'block';
+            results.style.display = 'none';
+            statusText.style.display = 'block';
+            
+            try {
+                updateProgress(0);
+                updateStatus('准备开始测试...');
+                await sleep(500);
+        
+                updateProgress(10);
+                updateStatus('正在测试延迟...');
+                const latency = await testLatency();
+                
+                updateProgress(50);
+                updateStatus('正在测试下载速度...');
+                const downloadSpeed = await testDownloadSpeed();
+                
+                updateProgress(100);
+                updateStatus('测试完成！');
+                
+                await sleep(500);
+                
+                document.getElementById('latencyValue').textContent = latency.toFixed(2);
+                document.getElementById('downloadValue').textContent = downloadSpeed.toFixed(2);
+                document.getElementById('timestamp').textContent = 
+                    '测试时间: ' + new Date().toLocaleTimeString('zh-CN');
+                
+                results.style.display = 'block';
+                progressContainer.style.display = 'none';
+                statusText.style.display = 'none';
+                
+            } catch (error) {
+                console.error('测速错误:', error);
+                alert('测速过程中出现错误，请重试');
+                progressContainer.style.display = 'none';
+                statusText.style.display = 'none';
+            } finally {
+                testing = false;
+                startBtn.disabled = false;
+                startBtn.textContent = '重新测速';
+            }
+        }
+    </script>
+  </body>
+</html>
