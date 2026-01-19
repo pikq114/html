@@ -69,151 +69,94 @@
     <script src="/sidebar.js"></script>
     <!--ai写的,差距太坤八大了,todo:重写/废了他-->
     <script>
-        let testing = false;
-        
-        async function testLatency() {
-            const pings = [];
-            const testCount = 5;
-        
-            for (let i = 0; i < testCount; i++) {
-                updateStatus(`正在测试延迟... (${i + 1}/${testCount})`);
-                const startTime = performance.now();
-                
-                try {
-                    const cacheBuster = `?ping=${Date.now()}_${Math.random()}`;
-                    await fetch(`${window.location.origin}/${cacheBuster}`, {
-                        method: 'HEAD',
-                        cache: 'no-store',
-                        headers: {
-                            'Cache-Control': 'no-cache',
-                            'Pragma': 'no-cache'
-                        }
-                    });
-                    
-                    const endTime = performance.now();
-                    pings.push(endTime - startTime);
-                } catch (error) {
-                    console.error('延迟测试错误:', error);
-                }
-        
-                await sleep(200);
-            }
-        
-            return pings.length > 0 
-                ? pings.reduce((a, b) => a + b) / pings.length 
-                : 0;
+let testing = false;
+
+// 辅助函数：格式化速度
+const formatMbps = (bytesPerSecond) => ((bytesPerSecond * 8) / (1024 * 1024)).toFixed(2);
+
+async function startTest() {
+    if (testing) return;
+    testing = true;
+
+    const ui = {
+        btn: document.getElementById('startBtn'),
+        progress: document.getElementById('progressContainer'),
+        fill: document.getElementById('progressFill'),
+        status: document.getElementById('statusText'),
+        res: document.getElementById('results'),
+        latency: document.getElementById('latencyValue'),
+        download: document.getElementById('downloadValue')
+    };
+
+    ui.btn.disabled = true;
+    ui.btn.textContent = '测试中...';
+    ui.res.style.display = 'none';
+    ui.progress.style.display = 'block';
+
+    try {
+        // --- 阶段 1: 延迟测试 (Ping) ---
+        ui.status.textContent = '正在探测服务器响应延迟...';
+        let pings = [];
+        for (let i = 0; i < 6; i++) {
+            const start = performance.now();
+            // 使用 HEAD 请求减小流量消耗，Cache-Buster 防止缓存
+            await fetch(`${window.location.origin}/?t=${Date.now()}`, { method: 'HEAD', cache: 'no-store' });
+            pings.push(performance.now() - start);
+            ui.fill.style.width = `${(i + 1) * 5}%`; // 0-30%
+            await new Promise(r => setTimeout(r, 100));
         }
+        const avgLatency = Math.min(...pings); // 取最小值作为有效延迟
+        ui.latency.textContent = avgLatency.toFixed(1);
+
+        // --- 阶段 2: 下载速度测试 (Streaming) ---
+        ui.status.textContent = '正在进行带宽压力测试...';
         
-        async function testDownloadSpeed() {
-            const testSizes = [10000000, 20000000, 50000000]; // 10MB, 20MB, 50MB
-            const speeds = [];
+        // 注意：这里建议指向服务器一个真实存在的大文件(如 /test.bin)，
+        // 如果没有，测速将取决于你 index.html 的大小，依然不准。
+        const testUrl = `${window.location.origin}/?cb=${Date.now()}`; 
+        const response = await fetch(testUrl, { cache: 'no-store' });
         
-            for (let i = 0; i < testSizes.length; i++) {
-                updateStatus(`正在测试下载速度... (${i + 1}/${testSizes.length})`);
-                const size = testSizes[i];
-                const startTime = performance.now();
-                
-                try {
-                    const cacheBuster = `?download=${Date.now()}_${Math.random()}_${size}`;
-                    const url = `${window.location.origin}/${cacheBuster}`;
-                    
-                    const response = await fetch(url, {
-                        method: 'GET',
-                        cache: 'no-store',
-                        headers: {
-                            'Cache-Control': 'no-cache',
-                            'Pragma': 'no-cache'
-                        }
-                    });
-                    
-                    await response.blob();
-                    const endTime = performance.now();
-                    const duration = (endTime - startTime) / 1000;
-                    const speed = (size * 8) / duration / 1000000;
-                    
-                    speeds.push(speed);
-                } catch (error) {
-                    console.error('下载测试错误:', error);
-                }
+        const reader = response.body.getReader();
+        let receivedLength = 0;
+        const startTime = performance.now();
         
-                await sleep(300);
-            }
-        
-            return speeds.length > 0 
-                ? speeds.reduce((a, b) => a + b) / speeds.length 
-                : 0;
-        }
-        
-        function updateProgress(percent) {
-            const progressFill = document.getElementById('progressFill');
-            const progressText = document.getElementById('progressText');
-            progressFill.style.width = percent + '%';
-            progressText.textContent = `测试进度: ${Math.round(percent)}%`;
-        }
-        
-        function updateStatus(text) {
-            const statusText = document.getElementById('statusText');
-            statusText.textContent = text;
-            statusText.style.display = 'block';
-        }
-        
-        function sleep(ms) {
-            return new Promise(resolve => setTimeout(resolve, ms));
-        }
-        
-        async function startTest() {
-            if (testing) return;
+        // 测速样本窗口（收集 3 秒钟的数据）
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
             
-            testing = true;
-            const startBtn = document.getElementById('startBtn');
-            const progressContainer = document.getElementById('progressContainer');
-            const results = document.getElementById('results');
-            const statusText = document.getElementById('statusText');
+            receivedLength += value.length;
+            const elapsed = (performance.now() - startTime) / 1000;
             
-            startBtn.disabled = true;
-            startBtn.textContent = '测试中...';
-            progressContainer.style.display = 'block';
-            results.style.display = 'none';
-            statusText.style.display = 'block';
-            
-            try {
-                updateProgress(0);
-                updateStatus('准备开始测试...');
-                await sleep(500);
-        
-                updateProgress(10);
-                updateStatus('正在测试延迟...');
-                const latency = await testLatency();
-                
-                updateProgress(50);
-                updateStatus('正在测试下载速度...');
-                const downloadSpeed = await testDownloadSpeed();
-                
-                updateProgress(100);
-                updateStatus('测试完成！');
-                
-                await sleep(500);
-                
-                document.getElementById('latencyValue').textContent = latency.toFixed(2);
-                document.getElementById('downloadValue').textContent = downloadSpeed.toFixed(2);
-                document.getElementById('timestamp').textContent = 
-                    '测试时间: ' + new Date().toLocaleTimeString('zh-CN');
-                
-                results.style.display = 'block';
-                progressContainer.style.display = 'none';
-                statusText.style.display = 'none';
-                
-            } catch (error) {
-                console.error('测速错误:', error);
-                alert('测速过程中出现错误，请重试');
-                progressContainer.style.display = 'none';
-                statusText.style.display = 'none';
-            } finally {
-                testing = false;
-                startBtn.disabled = false;
-                startBtn.textContent = '重新测速';
+            // 更新进度条 (30%-100%)
+            const progress = Math.min(30 + (elapsed / 3) * 70, 100);
+            ui.fill.style.width = `${progress}%`;
+
+            // 实时显示大概速度
+            const currentSpeed = formatMbps(receivedLength / elapsed);
+            ui.download.textContent = currentSpeed;
+
+            // 运行超过 3 秒就停止，防止消耗用户太多流量
+            if (elapsed > 3) {
+                await reader.cancel();
+                break;
             }
         }
+
+        ui.status.textContent = '测试完成！';
+        ui.res.style.display = 'grid';
+        document.getElementById('timestamp').textContent = '测速时间: ' + new Date().toLocaleString();
+
+    } catch (err) {
+        console.error(err);
+        ui.status.textContent = '测试失败，请检查网络连接';
+    } finally {
+        testing = false;
+        ui.btn.disabled = false;
+        ui.btn.textContent = '重新测速';
+        ui.progress.style.display = 'none';
+    }
+}
     </script>
   </body>
 </html>
