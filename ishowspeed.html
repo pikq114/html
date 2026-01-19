@@ -113,7 +113,8 @@ async function startTest() {
         
         // 注意：这里建议指向服务器一个真实存在的大文件(如 /test.bin)，
         // 如果没有，测速将取决于你 index.html 的大小，依然不准。
-        const testUrl = `${window.location.origin}/?cb=${Date.now()}`; 
+        // 修改这一行
+const testUrl = `${window.location.origin}/meow/test.bin?cb=${Date.now()}`;
         const response = await fetch(testUrl, { cache: 'no-store' });
         
         const reader = response.body.getReader();
